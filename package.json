@@ -1,0 +1,27 @@
+{
+  "name": "com.unityai.mcp",
+  "version": "1.0.0",
+  "displayName": "Unity MCP Server",
+  "description": "Model Context Protocol server for Unity Editor - exposes project context to AI coding agents",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://github.com/unityai/unity-mcp#readme",
+  "changelogUrl": "https://github.com/unityai/unity-mcp/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/unityai/unity-mcp/blob/main/LICENSE.md",
+  "keywords": [
+    "mcp",
+    "ai",
+    "editor",
+    "tools",
+    "context",
+    "claude",
+    "copilot",
+    "cursor"
+  ],
+  "author": {
+    "name": "Unity AI Tools",
+    "email": "support@unityai.dev",
+    "url": "https://unityai.dev"
+  },
+  "samples": []
+}

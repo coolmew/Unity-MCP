@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "unity": {
+      "url": "http://localhost:6400/mcp",
+      "transport": "http"
+    }
+  }
+}
