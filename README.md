@@ -9,19 +9,54 @@ A Model Context Protocol (MCP) server plugin for Unity Editor that exposes proje
 - **Component Inspection**: Read all serialized fields with values, types, and tooltips
 - **Script Analysis**: List and read MonoBehaviour/ScriptableObject scripts with field and method information
 - **Project Settings**: Access PlayerSettings, QualitySettings, Physics, Tags/Layers, Input, Graphics, and Build settings
-- **Asset Database**: Search and query assets by type, folder, or name
+- **Asset Database**: Search and query assets by type, folder, or name with type-specific metadata
+- **Asset Dependencies**: Inspect dependency graphs for any asset
+- **Folder Structure**: Browse the project folder hierarchy
 - **Package Manager**: List all installed UPM packages
+- **Animation Inspection**: Read animation clips (curves, keyframes, events) and animator controllers (layers, states, transitions, parameters)
+- **Project Info**: Query runtime project information (product name, Unity version, platform, etc.)
 
 ### Write Operations (Opt-in)
 - **GameObject Manipulation**: Create, delete, rename, move, duplicate GameObjects
 - **Component Management**: Add, remove, enable/disable components
 - **Property Editing**: Modify component properties and serialized fields
+- **Object Reference Assignment**: Programmatic drag-and-drop equivalent for Inspector fields
 - **Transform Control**: Set position, rotation, scale
 - **Prefab Operations**: Create prefabs from GameObjects, instantiate prefabs
 - **Scene Management**: Save scenes
+- **Animation Authoring**: Create/edit animation clips, curves, keyframes, and events
+- **Animator Controller Authoring**: Create controllers, add states, transitions, parameters, and layers
 - **Editor Commands**: Execute safe C# expressions (sandboxed)
 
 All mutations support Unity's Undo system (Ctrl+Z).
+
+## Project Structure
+
+```
+com.unityai.mcp/
+├── Editor/
+│   ├── Handlers/
+│   │   ├── AnimationHandler.cs      # Animation clip & animator controller tools
+│   │   ├── AssetHandler.cs          # Asset search, packages, dependencies, folders
+│   │   ├── ComponentHandler.cs      # Component serialization & inspection
+│   │   ├── EditorCommandHandler.cs  # Sandboxed C# expression execution
+│   │   ├── HierarchyHandler.cs      # Scene hierarchy & GameObject queries
+│   │   ├── MutationHandler.cs       # All write operations (GameObjects, components, prefabs)
+│   │   ├── ProjectSettingsHandler.cs# Unity project settings reader
+│   │   └── ScriptHandler.cs         # Script listing & source reading
+│   ├── Transport/
+│   │   ├── HttpTransport.cs         # HTTP/SSE server & JSON-RPC transport
+│   │   └── StdioTransport.cs        # Stdio transport & JSON-RPC message types
+│   ├── Utils/
+│   │   └── SerializationHelper.cs   # Unity type serialization & JSON parser
+│   ├── UnityMCPServer.cs            # Main server, MCP protocol, tool routing
+│   ├── UnityMCPEditorWindow.cs      # Editor UI (Window > Unity MCP)
+│   └── com.unityai.mcp.Editor.asmdef
+├── package.json
+├── mcp_config.json
+├── CHANGELOG.md
+└── README.md
+```
 
 ## Requirements
 
@@ -34,7 +69,7 @@ All mutations support Unity's Undo system (Ctrl+Z).
 
 1. Open Unity Package Manager (Window > Package Manager)
 2. Click the "+" button and select "Add package from git URL..."
-3. Enter: `https://github.com/yourusername/unity-mcp.git`
+3. Enter: `https://github.com/coolmew/Unity-MCP.git`
 
 ### Option 2: Local Package
 
@@ -74,9 +109,9 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
-### Cursor
+### Cursor / Windsurf
 
-Add to your Cursor MCP settings:
+Add to your MCP settings:
 
 ```json
 {
@@ -99,9 +134,13 @@ curl -X POST http://localhost:6400/rpc \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
+---
+
 ## Available Tools
 
-### unity/getSceneHierarchy
+### Read Tools
+
+#### getSceneHierarchy
 
 Returns the full scene hierarchy with all GameObjects.
 
@@ -126,7 +165,7 @@ Returns the full scene hierarchy with all GameObjects.
 }
 ```
 
-### unity/getGameObject
+#### getGameObject
 
 Returns detailed information about a specific GameObject.
 
@@ -151,7 +190,7 @@ Returns detailed information about a specific GameObject.
 }
 ```
 
-### unity/getComponent
+#### getComponent
 
 Returns all serialized fields of a component.
 
@@ -171,7 +210,7 @@ Returns all serialized fields of a component.
 }
 ```
 
-### unity/findGameObjects
+#### findGameObjects
 
 Searches for GameObjects matching filters.
 
@@ -183,7 +222,7 @@ Searches for GameObjects matching filters.
 - `offset` (int, optional): Pagination offset
 - `limit` (int, optional): Max results (default: 100, max: 500)
 
-### unity/getScripts
+#### getScripts
 
 Returns all MonoBehaviour and ScriptableObject scripts.
 
@@ -206,43 +245,46 @@ Returns all MonoBehaviour and ScriptableObject scripts.
 }
 ```
 
-### unity/readScript
+#### readScript
 
-Returns the full source code of a script.
+Returns the full source code of a script with parsed structure (usings, classes, methods, fields).
 
 **Parameters:**
 - `scriptPath` (string, required): Path to the script (e.g., "Assets/Scripts/Player.cs")
 
-### unity/getProjectSettings
+#### getProjectSettings
 
 Returns Unity project settings.
 
 **Parameters:**
 - `sections` (array, optional): Specific sections to include
-  - Valid values: "player", "quality", "physics", "physics2d", "tags", "layers", "input", "graphics", "build", "time", "audio"
+  - Valid values: `"player"`, `"quality"`, `"physics"`, `"physics2d"`, `"tags"`, `"layers"`, `"input"`, `"graphics"`, `"build"`, `"time"`, `"audio"`
 
 **Response includes:**
 - PlayerSettings (company, product, version, scripting backend, etc.)
 - QualitySettings (current level, vSync, shadows, etc.)
 - PhysicsSettings (gravity, contact offset, etc.)
+- Physics2DSettings (gravity, iterations, etc.)
 - TagsAndLayers (all tags, layer names, sorting layers)
 - InputManager (axes definitions)
 - GraphicsSettings (render pipeline, tier settings)
 - BuildSettings (active target, scenes in build)
+- TimeSettings (fixed delta time, time scale, etc.)
+- AudioSettings (speaker mode, sample rate, etc.)
 
-### unity/getAssets
+#### getAssets
 
-Searches for assets in the project.
+Searches for assets in the project. Returns type-specific metadata (texture dimensions, audio length, mesh vertex count, material shader, etc.).
 
 **Parameters:**
-- `type` (string, optional): Asset type (e.g., "Texture2D", "Material", "Prefab")
+- `type` (string, optional): Asset type (e.g., "Texture2D", "Material", "Prefab", "AudioClip", "AnimationClip")
 - `folder` (string, optional): Folder path (e.g., "Assets/Textures")
 - `nameFilter` (string, optional): Filter by name
 - `labelFilter` (string, optional): Filter by asset label
 - `offset` (int, optional): Pagination offset
 - `limit` (int, optional): Max results (default: 100)
 
-### unity/getPackages
+#### getPackages
 
 Returns all installed UPM packages.
 
@@ -258,7 +300,45 @@ Returns all installed UPM packages.
 }
 ```
 
-### unity/runEditorCommand
+#### getAssetDependencies
+
+Returns the dependency graph for a specific asset.
+
+**Parameters:**
+- `path` (string, required): Asset path (e.g., "Assets/Prefabs/Player.prefab")
+- `recursive` (bool, optional): Include transitive dependencies (default: false)
+
+#### getFolderStructure
+
+Returns the folder hierarchy of the project.
+
+**Parameters:**
+- `path` (string, optional): Root path (default: "Assets")
+- `maxDepth` (int, optional): Maximum depth to traverse (default: 3)
+
+#### getProjectInfo
+
+Returns basic Unity project information (product name, company, Unity version, platform, play mode state, etc.). No parameters.
+
+#### getAvailableCommands
+
+Returns the list of supported editor command expressions grouped by category. No parameters.
+
+#### getAnimationClipInfo
+
+Returns full information about an animation clip including all curves, keyframes, and events.
+
+**Parameters:**
+- `clipPath` (string, required): Path to the `.anim` asset
+
+#### getAnimatorControllerInfo
+
+Returns full information about an animator controller including layers, states, parameters, and transitions.
+
+**Parameters:**
+- `controllerPath` (string, required): Path to the `.controller` asset
+
+#### runEditorCommand
 
 Executes a C# expression (requires opt-in).
 
@@ -268,21 +348,24 @@ Executes a C# expression (requires opt-in).
 - `code` (string, required): C# expression to execute
 
 **Supported expressions:**
-- `Selection.activeGameObject`
-- `EditorApplication.isPlaying`
+- `Selection.activeGameObject`, `Selection.gameObjects.Length`
+- `EditorApplication.isPlaying`, `EditorApplication.isCompiling`
 - `SceneManager.GetActiveScene().name`
 - `Debug.Log("message")`
 - `GameObject.Find("name")`
-- `AssetDatabase.FindAssets("filter")`
-- `AssetDatabase.Refresh()`
+- `AssetDatabase.FindAssets("filter")`, `AssetDatabase.Refresh()`
 
-## Mutation Tools (Write Operations)
+---
+
+### Mutation Tools (Write Operations)
 
 **⚠️ All mutation tools require "Enable Mutations" to be turned on in Window > Unity MCP settings.**
 
-All mutations support Unity's Undo system - you can press Ctrl+Z (Cmd+Z on Mac) to undo any changes made by AI agents.
+All mutations support Unity's Undo system — press Ctrl+Z (Cmd+Z on Mac) to undo any changes made by AI agents.
 
-### unity/createGameObject
+#### GameObject Operations
+
+##### createGameObject
 
 Creates a new GameObject in the scene.
 
@@ -295,9 +378,9 @@ Creates a new GameObject in the scene.
 - `scale` (object, optional): Local scale `{x, y, z}`
 - `tag` (string, optional): GameObject tag
 - `layer` (int, optional): GameObject layer
-- `primitive` (string, optional): Create primitive mesh: "cube", "sphere", "capsule", "cylinder", "plane", "quad"
+- `primitive` (string, optional): Create primitive mesh: `"cube"`, `"sphere"`, `"capsule"`, `"cylinder"`, `"plane"`, `"quad"`
 
-### unity/deleteGameObject
+##### deleteGameObject
 
 Deletes a GameObject from the scene.
 
@@ -306,7 +389,7 @@ Deletes a GameObject from the scene.
 - `path` (string): GameObject hierarchy path
 - `name` (string): GameObject name
 
-### unity/renameGameObject
+##### renameGameObject
 
 Renames a GameObject.
 
@@ -314,7 +397,7 @@ Renames a GameObject.
 - `instanceID` or `path` (required): GameObject identifier
 - `newName` (string, required): New name
 
-### unity/moveGameObject
+##### moveGameObject
 
 Moves a GameObject to a new parent or changes its sibling index.
 
@@ -324,7 +407,7 @@ Moves a GameObject to a new parent or changes its sibling index.
 - `newParentPath` (string, optional): New parent hierarchy path
 - `siblingIndex` (int, optional): Sibling index position
 
-### unity/duplicateGameObject
+##### duplicateGameObject
 
 Duplicates a GameObject.
 
@@ -332,7 +415,7 @@ Duplicates a GameObject.
 - `instanceID` or `path` (required): GameObject identifier
 - `newName` (string, optional): Name for the duplicate
 
-### unity/setGameObjectActive
+##### setGameObjectActive
 
 Sets a GameObject's active state.
 
@@ -340,7 +423,9 @@ Sets a GameObject's active state.
 - `instanceID` or `path` (required): GameObject identifier
 - `active` (bool, required): Active state
 
-### unity/setTransform
+#### Transform Operations
+
+##### setTransform
 
 Sets a GameObject's transform (position, rotation, scale).
 
@@ -351,7 +436,9 @@ Sets a GameObject's transform (position, rotation, scale).
 - `scale` (object, optional): Scale `{x, y, z}`
 - `local` (bool, optional): Use local space (default: true)
 
-### unity/addComponent
+#### Component Operations
+
+##### addComponent
 
 Adds a component to a GameObject.
 
@@ -359,7 +446,7 @@ Adds a component to a GameObject.
 - `instanceID` or `path` (required): GameObject identifier
 - `componentType` (string, required): Component type name (e.g., "Rigidbody", "BoxCollider", "AudioSource")
 
-### unity/removeComponent
+##### removeComponent
 
 Removes a component from a GameObject.
 
@@ -367,7 +454,7 @@ Removes a component from a GameObject.
 - `instanceID` or `path` (required): GameObject identifier
 - `componentType` (string, required): Component type name
 
-### unity/setComponentEnabled
+##### setComponentEnabled
 
 Enables or disables a component.
 
@@ -376,7 +463,9 @@ Enables or disables a component.
 - `componentType` (string, required): Component type name
 - `enabled` (bool, required): Enabled state
 
-### unity/setComponentProperty
+#### Property Operations
+
+##### setComponentProperty
 
 Sets a single property/field value on a component.
 
@@ -396,7 +485,7 @@ Sets a single property/field value on a component.
 }
 ```
 
-### unity/setMultipleProperties
+##### setMultipleProperties
 
 Sets multiple properties on a component at once.
 
@@ -418,14 +507,32 @@ Sets multiple properties on a component at once.
 }
 ```
 
-### unity/saveScene
+##### assignObjectReference
+
+Assigns a scene object (GameObject, component) or asset to a component's serialized object-reference field. This is the programmatic equivalent of drag-and-drop in the Inspector.
+
+**Parameters:**
+- `targetInstanceID` or `targetPath` or `targetName` (required): Target GameObject (the one with the field)
+- `componentType` (string, required): Component type on the target
+- `propertyName` (string, required): Serialized field name to assign to
+- **Source** (one required):
+  - `sourceInstanceID` (int): Instance ID of the source object
+  - `sourcePath` (string): Source GameObject hierarchy path
+  - `sourceName` (string): Source GameObject name
+  - `assetPath` (string): Asset path (e.g., "Assets/Materials/MyMat.mat")
+  - `clear` (bool): Set to `true` to null the reference
+- `sourceComponentType` (string, optional): Get a specific component from the source GameObject instead of the GameObject itself
+
+#### Scene & Prefab Operations
+
+##### saveScene
 
 Saves the current or specified scene.
 
 **Parameters:**
 - `scenePath` (string, optional): Scene path (saves active scene if not specified)
 
-### unity/createPrefab
+##### createPrefab
 
 Creates a prefab from a GameObject.
 
@@ -433,7 +540,7 @@ Creates a prefab from a GameObject.
 - `instanceID` or `path` (required): GameObject identifier
 - `path` (string, optional): Prefab save path (e.g., "Assets/Prefabs/MyPrefab.prefab")
 
-### unity/instantiatePrefab
+##### instantiatePrefab
 
 Instantiates a prefab into the scene.
 
@@ -442,29 +549,171 @@ Instantiates a prefab into the scene.
 - `parentInstanceID` (int, optional): Parent GameObject instance ID
 - `position` (object, optional): World position `{x, y, z}`
 
+#### Animation Clip Operations
+
+##### createAnimationClip
+
+Creates a new AnimationClip asset.
+
+**Parameters:**
+- `name` (string, optional): Clip name (default: "New Animation")
+- `savePath` (string, optional): Save path (e.g., "Assets/Animations/Walk.anim")
+- `loop` (bool, optional): Loop the animation
+- `frameRate` (number, optional): Frame rate (default: 60)
+- `wrapMode` (string, optional): `"loop"`, `"pingpong"`, `"clampforever"`, `"once"`
+
+##### setAnimationCurve
+
+Sets or replaces an entire animation curve on a clip.
+
+**Parameters:**
+- `clipPath` (string, required): Path to the `.anim` asset
+- `propertyName` (string, required): Property name (e.g., "localPosition.x")
+- `type` (string, required): Component type (e.g., "Transform", "SpriteRenderer")
+- `keyframes` (array, required): Array of `{time, value, inTangent?, outTangent?}`
+- `relativePath` (string, optional): Relative path to child (empty for root)
+
+##### removeAnimationCurve
+
+Removes an animation curve from a clip.
+
+**Parameters:**
+- `clipPath` (string, required): Path to the `.anim` asset
+- `propertyName` (string, required): Property name to remove
+- `type` (string, required): Component type
+- `relativePath` (string, optional): Relative path to child
+
+##### addAnimationKeyframe
+
+Adds a single keyframe to an existing or new curve.
+
+**Parameters:**
+- `clipPath` (string, required): Path to the `.anim` asset
+- `propertyName` (string, required): Property name
+- `type` (string, required): Component type
+- `time` (number, required): Keyframe time in seconds
+- `value` (number, required): Keyframe value
+- `inTangent` (number, optional): In tangent
+- `outTangent` (number, optional): Out tangent
+- `relativePath` (string, optional): Relative path to child
+
+##### addAnimationEvent
+
+Adds an animation event that calls a function at a specific time.
+
+**Parameters:**
+- `clipPath` (string, required): Path to the `.anim` asset
+- `functionName` (string, required): Function to call
+- `time` (number, required): Event time in seconds
+- `intParameter` (int, optional): Int parameter
+- `floatParameter` (number, optional): Float parameter
+- `stringParameter` (string, optional): String parameter
+
+##### setClipSettings
+
+Modifies animation clip settings.
+
+**Parameters:**
+- `clipPath` (string, required): Path to the `.anim` asset
+- `loopTime` (bool, optional): Enable looping
+- `loopBlend` (bool, optional): Loop pose
+- `cycleOffset` (number, optional): Cycle offset
+- `frameRate` (number, optional): Frame rate
+- `startTime` (number, optional): Start time
+- `stopTime` (number, optional): Stop time
+
+#### Animator Controller Operations
+
+##### createAnimatorController
+
+Creates a new Animator Controller asset.
+
+**Parameters:**
+- `name` (string, optional): Controller name
+- `savePath` (string, optional): Save path (e.g., "Assets/Animations/Player.controller")
+
+##### addAnimatorParameter
+
+Adds a parameter to an animator controller.
+
+**Parameters:**
+- `controllerPath` (string, required): Path to the `.controller` asset
+- `parameterName` (string, required): Parameter name
+- `parameterType` (string, optional): `"float"`, `"int"`, `"bool"`, `"trigger"` (default: "float")
+- `defaultValue` (optional): Default value for the parameter
+
+##### addAnimatorState
+
+Adds a state to an animator controller layer.
+
+**Parameters:**
+- `controllerPath` (string, required): Path to the `.controller` asset
+- `stateName` (string, required): State name
+- `layerIndex` (int, optional): Layer index (default: 0)
+- `clipPath` (string, optional): Animation clip to assign as motion
+- `speed` (number, optional): Playback speed (default: 1)
+- `tag` (string, optional): State tag
+- `isDefault` (bool, optional): Set as default state
+
+##### addAnimatorTransition
+
+Adds a transition between two states with optional conditions.
+
+**Parameters:**
+- `controllerPath` (string, required): Path to the `.controller` asset
+- `sourceState` (string, required): Source state name
+- `destinationState` (string, required): Destination state name
+- `layerIndex` (int, optional): Layer index (default: 0)
+- `hasExitTime` (bool, optional): Has exit time
+- `exitTime` (number, optional): Exit time (0–1)
+- `duration` (number, optional): Transition duration
+- `conditions` (array, optional): Array of `{parameter, mode, threshold}` — mode: `"greater"`, `"less"`, `"equals"`, `"notequal"`, `"if"`, `"ifnot"`
+
+##### addAnimatorLayer
+
+Adds a new layer to an animator controller.
+
+**Parameters:**
+- `controllerPath` (string, required): Path to the `.controller` asset
+- `layerName` (string, required): Layer name
+- `defaultWeight` (number, optional): Default weight (0–1)
+
+##### assignAnimator
+
+Assigns an Animator Controller to a GameObject's Animator component (adds Animator if missing).
+
+**Parameters:**
+- `instanceID` or `path` or `name` (required): GameObject identifier
+- `controllerPath` (string, optional): Path to the `.controller` asset
+- `avatarPath` (string, optional): Path to avatar asset
+- `applyRootMotion` (bool, optional): Apply root motion
+
+---
+
 ## Editor Window
 
 Open **Window > Unity MCP** to access:
 
-- **Server Status**: View running state and port
-- **Settings**: Configure auto-start, port, and security options
-- **MCP Config**: Copy configuration for AI clients
-- **Request Log**: View incoming requests and responses
+- **Server Status**: View running state, port, and endpoint URLs
+- **Settings**: Configure auto-start, port, stdio transport, and security options
+- **MCP Config**: Copy HTTP or SSE configuration for AI clients
+- **Request Log**: View incoming requests and responses with auto-scroll
 
 ## Security
 
 - The server only listens on localhost (127.0.0.1)
-- **Mutations are disabled by default** - must be explicitly enabled in settings
-- Editor commands are disabled by default
-- Code execution is sandboxed with whitelisted operations
-- Dangerous operations (file deletion, process spawning) are blocked
+- **Mutations are disabled by default** — must be explicitly enabled in settings
+- **Editor commands are disabled by default** — requires explicit opt-in with a confirmation dialog
+- Code execution is sandboxed with namespace whitelisting
+- Dangerous operations (file deletion, process spawning, assembly loading) are blocked
 - All mutations use Unity's Undo system for easy rollback
 
 ## Performance
 
-- Hierarchy snapshots are cached and invalidated on changes
+- Hierarchy snapshots are cached per-frame and invalidated on scene/hierarchy changes
+- Script metadata is cached for 30 seconds
 - Large results support pagination with `offset` and `limit`
-- All Unity API calls run on the main thread via EditorApplication.update
+- All Unity API calls run on the main thread via `EditorApplication.update`
 
 ## Troubleshooting
 
@@ -479,7 +728,8 @@ Open **Window > Unity MCP** to access:
 
 ### Missing data in responses
 - Some data requires the scene to be loaded
-- Package list may show "loading" on first request - retry after a moment
+- Package list may show "loading" on first request — retry after a moment
+- Script cache refreshes every 30 seconds; new scripts appear on the next refresh
 
 ## API Reference
 
@@ -488,9 +738,19 @@ Open **Window > Unity MCP** to access:
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/rpc` | POST | JSON-RPC 2.0 requests |
-| `/mcp` | GET/POST | MCP protocol endpoint |
+| `/message` | POST | Alias for `/rpc` |
+| `/mcp` | GET | Server capabilities |
+| `/mcp` | POST | MCP protocol requests (JSON-RPC) |
 | `/sse` | GET | Server-Sent Events stream |
 | `/health` | GET | Health check |
+
+### MCP Protocol
+
+The server implements MCP protocol version `2024-11-05` with support for:
+- `initialize` — returns server info and capabilities
+- `tools/list` — returns all available tool definitions
+- `tools/call` — invokes a tool by name with arguments
+- `resources/list` — returns available resources
 
 ### Error Codes
 
@@ -502,18 +762,27 @@ Open **Window > Unity MCP** to access:
 | -32602 | Invalid params |
 | -32603 | Internal error |
 | -32000 | Unity runtime error |
-| -32001 | Security error |
+| -32001 | Security error (mutations/commands disabled) |
 | -32002 | Not found error |
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License — see LICENSE file for details.
 
 ## Contributing
 
 Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
 ## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+### 1.0.1
+- Added complete Animation system (14 tools): clip creation, curve/keyframe editing, events, animator controllers, states, transitions, layers
+- Added `assignObjectReference` tool for programmatic Inspector drag-and-drop
+- Added `getAssetDependencies`, `getFolderStructure`, `getProjectInfo`, `getAvailableCommands` tools
+- Added Unity 6.x compatibility with conditional compilation for removed APIs
+- Updated README to document all tools and project structure
 
 ### 1.0.0
 - Initial release
